@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+pydantic-settings
+httpx
+pandas
+numpy
+statsmodels
+networkx
+python-dotenv
+earthengine-api
+scikit-learn
+shap
+gymnasium
+stable-baselines3
