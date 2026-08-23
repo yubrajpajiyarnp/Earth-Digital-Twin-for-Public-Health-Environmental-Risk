@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from './api'
+import { useAdmin } from './AdminContext'
 import AqiPanel from './components/AqiPanel'
 import VegetationPanel from './components/VegetationPanel'
 import RainfallPanel from './components/RainfallPanel'
@@ -8,16 +9,10 @@ import SimulationPanel from './components/SimulationPanel'
 import DisasterSimulationPanel from './components/DisasterSimulationPanel'
 import OptimizerPanel from './components/OptimizerPanel'
 import KnowledgeGraphPanel from './components/KnowledgeGraphPanel'
+import AdminPanel from './components/AdminPanel'
+import AdminLogin from './components/AdminLogin'
 import RiskScaleLegend from './components/RiskScaleLegend'
 import TabBar from './components/TabBar'
-
-const NAV_LINKS = [
-  { href: '#air-quality', label: 'Air quality' },
-  { href: '#vegetation', label: 'Vegetation' },
-  { href: '#environment', label: 'Rainfall, wildlife & simulate' },
-  { href: '#optimize', label: 'Optimize' },
-  { href: '#graph', label: 'Knowledge graph' },
-]
 
 const ENV_TABS = [
   { id: 'rainfall', label: 'Rainfall & flood' },
@@ -28,10 +23,20 @@ const ENV_TABS = [
 function App() {
   const [city, setCity] = useState(null)
   const [envTab, setEnvTab] = useState('rainfall')
+  const { verified } = useAdmin()
 
   useEffect(() => {
     api.health().then((h) => setCity(h.pilot_city)).catch(() => {})
   }, [])
+
+  const navLinks = [
+    { href: '#air-quality', label: 'Air quality' },
+    { href: '#vegetation', label: 'Vegetation' },
+    { href: '#environment', label: 'Rainfall, wildlife & simulate' },
+    { href: '#optimize', label: 'Optimize' },
+    { href: '#graph', label: 'Knowledge graph' },
+    ...(verified ? [{ href: '#admin', label: 'Admin' }] : []),
+  ]
 
   return (
     <>
@@ -40,11 +45,12 @@ function App() {
           <span className="dot" />
           Earth Digital Twin
         </span>
-        {NAV_LINKS.map((link) => (
+        {navLinks.map((link) => (
           <a key={link.href} href={link.href}>
             {link.label}
           </a>
         ))}
+        <AdminLogin />
       </nav>
 
       <header className="app-header">
@@ -109,6 +115,16 @@ function App() {
         </div>
         <KnowledgeGraphPanel />
       </section>
+
+      {verified && (
+        <section className="block" id="admin">
+          <div className="section-head">
+            <h2>Admin</h2>
+            <span className="section-note">Manage history, graph edges &amp; settings</span>
+          </div>
+          <AdminPanel />
+        </section>
+      )}
     </>
   )
 }

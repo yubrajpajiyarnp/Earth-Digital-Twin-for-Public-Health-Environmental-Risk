@@ -3,6 +3,7 @@ from datetime import date, timedelta
 import pandas as pd
 
 from app.core.config import settings
+from app.db.crud import save_ndvi_series
 from app.services.cv.earth_engine_client import get_ee
 
 # Scene Classification Layer codes to keep: 4=vegetation, 5=bare soil, 6=water, 7=unclassified.
@@ -67,4 +68,5 @@ def fetch_ndvi_series(days_back: int = 365, buffer_m: int = 5000) -> pd.Series:
     df = pd.DataFrame(rows, columns=["date", "value"])
     df["date"] = pd.to_datetime(df["date"])
     daily = df.groupby("date")["value"].mean().sort_index()
+    save_ndvi_series(settings.pilot_city, daily)
     return daily

@@ -142,22 +142,26 @@ export default function DisasterSimulationPanel() {
               people
             </div>
 
-            <div className="reconstruction-label" style={{ marginTop: 12 }}>
+            <div className="reconstruction-label" style={{ marginTop: 12, marginBottom: 8 }}>
               Rebuild priority (highest public dependence first)
             </div>
-            {rec.breakdown_by_category.map((c) => (
-              <div className="breakdown-row" key={c.category}>
-                <span className="rank">#{c.priority}</span>
-                <span className="label">{c.label}</span>
-                <div className="bar-track">
-                  <div
-                    className="bar-fill"
-                    style={{ width: `${(c.estimated_cost_inr / maxCategoryCost) * 100}%` }}
-                  />
+            <div className="breakdown-grid">
+              {rec.breakdown_by_category.map((c) => (
+                <div className="breakdown-card" key={c.category}>
+                  <div className="breakdown-card-head">
+                    <span className="rank">#{c.priority}</span>
+                    <span className="label">{c.label}</span>
+                  </div>
+                  <div className="amount">{formatInr(c.estimated_cost_inr)}</div>
+                  <div className="bar-track">
+                    <div
+                      className="bar-fill"
+                      style={{ width: `${(c.estimated_cost_inr / maxCategoryCost) * 100}%` }}
+                    />
+                  </div>
                 </div>
-                <span className="amount">{formatInr(c.estimated_cost_inr)}</span>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
 
           <details className="assumption-details">

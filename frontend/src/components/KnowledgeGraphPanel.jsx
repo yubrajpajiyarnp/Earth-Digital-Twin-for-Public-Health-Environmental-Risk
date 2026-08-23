@@ -25,12 +25,16 @@ export default function KnowledgeGraphPanel() {
       <div className="card" style={{ marginBottom: 16 }}>
         <KnowledgeGraphDiagram nodes={graph.nodes} edges={graph.edges} />
       </div>
-      <div className="card">
+      <div className="kg-grid">
         {graph.edges.map((e) => (
-          <div className="kg-edge" key={`${e.source}-${e.target}`}>
-            <div>
+          <div
+            className="kg-card"
+            key={`${e.source}-${e.target}`}
+            style={{ '--kg-accent': e.data_connected ? 'var(--status-good)' : 'var(--text-muted)' }}
+          >
+            <div className="kg-card-head">
               <span className="path">
-                {e.source.replace('_', ' ')} → {e.target.replace('_', ' ')}
+                {e.source.replace(/_/g, ' ')} → {e.target.replace(/_/g, ' ')}
               </span>
               <span className={`connected ${e.data_connected ? 'yes' : 'no'}`}>
                 {e.data_connected ? 'live data' : 'schema only'}

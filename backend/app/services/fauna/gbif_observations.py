@@ -3,6 +3,7 @@ from datetime import date, timedelta
 import httpx
 
 from app.core.config import settings
+from app.db.crud import save_fauna_windows
 
 _URL = "https://api.gbif.org/v1/occurrence/search"
 
@@ -46,7 +47,7 @@ def fetch_monthly_occurrence_counts(num_months: int = 13, chunk_days: int = 30, 
         windows.append((start, end))
     windows.reverse()  # oldest first
 
-    return [
+    results = [
         {
             "start": start.isoformat(),
             "end": end.isoformat(),
@@ -54,3 +55,5 @@ def fetch_monthly_occurrence_counts(num_months: int = 13, chunk_days: int = 30, 
         }
         for start, end in windows
     ]
+    save_fauna_windows(settings.pilot_city, results)
+    return results

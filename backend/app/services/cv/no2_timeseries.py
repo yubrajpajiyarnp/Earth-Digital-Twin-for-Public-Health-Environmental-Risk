@@ -3,6 +3,7 @@ from datetime import date, timedelta
 import pandas as pd
 
 from app.core.config import settings
+from app.db.crud import save_no2_series
 from app.services.cv.earth_engine_client import get_ee
 
 _BAND = "tropospheric_NO2_column_number_density"
@@ -47,6 +48,11 @@ def fetch_no2_daily_series(days_back: int = 180) -> pd.Series:
     df = pd.DataFrame(rows, columns=["date", "value"])
     df["date"] = pd.to_datetime(df["date"])
     daily = df.groupby("date")["value"].mean().sort_index()
+
+    # Persist the raw (pre-interpolation) readings only — the interpolated/filled values
+    # below are for the forecaster's benefit, not real observations, and shouldn't be
+    # stored as if they were.
+    save_no2_series(settings.pilot_city, daily)
 
     full_index = pd.date_range(daily.index.min(), daily.index.max(), freq="D")
     daily = daily.reindex(full_index).interpolate(method="linear").ffill().bfill()

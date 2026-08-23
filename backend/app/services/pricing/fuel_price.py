@@ -3,6 +3,7 @@ import time
 import httpx
 
 from app.core.config import settings
+from app.db.crud import get_setting
 
 _URL = "https://purepriceio.com/api/v1/fuel/city/"
 
@@ -25,16 +26,21 @@ def get_petrol_price_inr_per_litre(city: str = "Vellore", state: str = "TN") -> 
     if _cache["price"] is not None and now - _cache["fetched_at"] < _CACHE_TTL_SECONDS:
         return _cache["price"]
 
-    if not settings.fuel_price_api_key:
+    # Admin-managed override (set via /api/admin/settings) takes priority over the
+    # .env-loaded default, so a key can be changed from the UI without a restart.
+    api_key = get_setting("fuel_price_api_key") or settings.fuel_price_api_key
+    client_id = get_setting("fuel_price_client_id") or settings.fuel_price_client_id
+
+    if not api_key:
         raise RuntimeError(
             "FUEL_PRICE_API_KEY not set. Get a key from your PurePriceIO dashboard and "
-            "add it to backend/.env."
+            "add it to backend/.env, or set it via the admin settings panel."
         )
-    if not settings.fuel_price_client_id:
+    if not client_id:
         raise RuntimeError(
             "FUEL_PRICE_CLIENT_ID not set. PurePriceIO requires a separate Client ID "
             "alongside the API key — find it on the same dashboard page and add it to "
-            "backend/.env as FUEL_PRICE_CLIENT_ID."
+            "backend/.env (or the admin settings panel) as FUEL_PRICE_CLIENT_ID."
         )
 
     try:
@@ -42,8 +48,8 @@ def get_petrol_price_inr_per_litre(city: str = "Vellore", state: str = "TN") -> 
             _URL,
             params={"city": city, "state": state},
             headers={
-                "Authorization": f"Bearer {settings.fuel_price_api_key}",
-                "X-Client-ID": settings.fuel_price_client_id,
+                "Authorization": f"Bearer {api_key}",
+                "X-Client-ID": client_id,
             },
             timeout=10,
         )

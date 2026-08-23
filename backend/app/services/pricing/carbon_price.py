@@ -4,6 +4,7 @@ import time
 import httpx
 
 from app.core.config import settings
+from app.db.crud import get_setting
 
 _BASE_URL = "https://v19.api.carbonmark.com"
 
@@ -26,16 +27,18 @@ def get_carbon_price_usd_per_ton() -> float:
     if _cache["price"] is not None and now - _cache["fetched_at"] < _CACHE_TTL_SECONDS:
         return _cache["price"]
 
-    if not settings.carbon_price_api_key:
+    api_key = get_setting("carbon_price_api_key") or settings.carbon_price_api_key
+    if not api_key:
         raise RuntimeError(
             "CARBON_PRICE_API_KEY not set. Generate a free Sandbox test key at "
-            "developers.carbonmark.com (Keys page) and add it to backend/.env."
+            "developers.carbonmark.com (Keys page) and add it to backend/.env, or set it "
+            "via the admin settings panel."
         )
 
     try:
         resp = httpx.get(
             f"{_BASE_URL}/prices",
-            headers={"Authorization": f"Bearer {settings.carbon_price_api_key}"},
+            headers={"Authorization": f"Bearer {api_key}"},
             timeout=10,
         )
         resp.raise_for_status()

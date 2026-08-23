@@ -3,6 +3,7 @@ from datetime import date, timedelta
 import pandas as pd
 
 from app.core.config import settings
+from app.db.crud import save_rainfall_series
 from app.services.cv.earth_engine_client import get_ee
 
 _BAND = "precipitation"
@@ -51,4 +52,5 @@ def fetch_rainfall_daily_series(days_back: int = 180, buffer_m: int = 10000) -> 
     df = pd.DataFrame(rows, columns=["date", "value"])
     df["date"] = pd.to_datetime(df["date"])
     daily = df.groupby("date")["value"].mean().sort_index()
+    save_rainfall_series(settings.pilot_city, daily)
     return daily

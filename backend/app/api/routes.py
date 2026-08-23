@@ -1,6 +1,9 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
+from app.core.admin import require_admin
 from app.core.config import settings
+from app.db import crud
 from app.services.cv.aqi_proxy import get_no2_proxy
 from app.services.cv.ndvi_timeseries import fetch_ndvi_series
 from app.services.cv.rainfall_timeseries import fetch_rainfall_daily_series
@@ -205,3 +208,122 @@ def knowledge_graph():
             for source, target, data in graph.edges(data=True)
         ],
     }
+
+
+# ---------------------------------------------------------------------------
+# History (read-only, public) — locally accumulated readings, one row per fetch of the
+# corresponding live pipeline. See app/db/ and CLAUDE.md.
+# ---------------------------------------------------------------------------
+
+
+@router.get("/history/no2")
+def history_no2(limit_days: int = 365):
+    return {"city": settings.pilot_city, "readings": crud.get_no2_history(settings.pilot_city, limit_days)}
+
+
+@router.get("/history/ndvi")
+def history_ndvi(limit_days: int = 365):
+    return {"city": settings.pilot_city, "readings": crud.get_ndvi_history(settings.pilot_city, limit_days)}
+
+
+@router.get("/history/rainfall")
+def history_rainfall(limit_days: int = 365):
+    return {"city": settings.pilot_city, "readings": crud.get_rainfall_history(settings.pilot_city, limit_days)}
+
+
+@router.get("/history/fauna")
+def history_fauna(limit: int = 365):
+    return {"city": settings.pilot_city, "readings": crud.get_fauna_history(settings.pilot_city, limit)}
+
+
+@router.get("/history/forecast-accuracy")
+def history_forecast_accuracy(indicator: str = "no2", limit: int = 200):
+    return {
+        "city": settings.pilot_city,
+        "indicator": indicator,
+        "points": crud.get_forecast_accuracy(settings.pilot_city, indicator, limit),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Admin (gated by require_admin — see app/core/admin.py for how trivial this check is
+# by explicit request). Manage stored history, knowledge-graph edges, and price-API
+# settings.
+# ---------------------------------------------------------------------------
+
+
+@router.get("/admin/whoami")
+def admin_whoami(email: str = Depends(require_admin)):
+    return {"ok": True, "email": email}
+
+
+@router.delete("/admin/history/{indicator}/{row_id}")
+def admin_delete_history(indicator: str, row_id: int, _: str = Depends(require_admin)):
+    try:
+        deleted = crud.delete_reading(indicator, row_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Row not found.")
+    return {"ok": True}
+
+
+@router.get("/admin/settings")
+def admin_list_settings(_: str = Depends(require_admin)):
+    return {"settings": crud.list_settings()}
+
+
+class SettingBody(BaseModel):
+    key: str
+    value: str
+
+
+@router.post("/admin/settings")
+def admin_set_setting(body: SettingBody, _: str = Depends(require_admin)):
+    crud.set_setting(body.key, body.value)
+    return {"ok": True}
+
+
+@router.delete("/admin/settings/{key}")
+def admin_delete_setting(key: str, _: str = Depends(require_admin)):
+    if not crud.delete_setting(key):
+        raise HTTPException(status_code=404, detail="Setting not found.")
+    return {"ok": True}
+
+
+@router.get("/admin/knowledge-graph/edges")
+def admin_list_kg_edges(_: str = Depends(require_admin)):
+    return {"edges": crud.list_kg_edges()}
+
+
+class KgEdgeBody(BaseModel):
+    id: int | None = None
+    source: str
+    target: str
+    relation: str
+    mechanism: str
+    citation: str
+    data_connected: bool = False
+
+
+@router.post("/admin/knowledge-graph/edges")
+def admin_upsert_kg_edge(body: KgEdgeBody, _: str = Depends(require_admin)):
+    try:
+        return crud.upsert_kg_edge(
+            source=body.source,
+            target=body.target,
+            relation=body.relation,
+            mechanism=body.mechanism,
+            citation=body.citation,
+            data_connected=body.data_connected,
+            edge_id=body.id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.delete("/admin/knowledge-graph/edges/{edge_id}")
+def admin_delete_kg_edge(edge_id: int, _: str = Depends(require_admin)):
+    if not crud.delete_kg_edge(edge_id):
+        raise HTTPException(status_code=404, detail="Edge not found.")
+    return {"ok": True}

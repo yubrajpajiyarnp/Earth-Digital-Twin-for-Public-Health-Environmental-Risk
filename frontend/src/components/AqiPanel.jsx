@@ -3,6 +3,7 @@ import { api } from '../api'
 import StatTile from './StatTile'
 import StatusPill from './StatusPill'
 import LineChart from './LineChart'
+import OutcomeCard from './OutcomeCard'
 
 function fmtNo2(v) {
   return `${v.toExponential(2)}`
@@ -105,16 +106,11 @@ export default function AqiPanel() {
 
       <div className="card">
         <h2>Health outcomes linked to NO₂</h2>
-        {risk.outcomes.map((o) => (
-          <div className="outcome-row" key={o.outcome}>
-            <div style={{ flex: 1 }}>
-              <div className="name">{o.outcome.replace('_', ' ')}</div>
-              <div className="mechanism">{o.explanation}</div>
-              <div className="citation">{o.citation}</div>
-            </div>
-            <StatusPill level={o.risk_level} />
-          </div>
-        ))}
+        <div className="outcome-grid">
+          {risk.outcomes.map((o) => (
+            <OutcomeCard key={o.outcome} outcome={o} />
+          ))}
+        </div>
       </div>
     </>
   )

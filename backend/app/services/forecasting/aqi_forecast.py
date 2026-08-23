@@ -1,6 +1,7 @@
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 
 from app.core.config import settings
+from app.db.crud import save_forecast
 from app.services.cv.no2_timeseries import fetch_no2_daily_series
 
 _MIN_POINTS_TO_FORECAST = 14
@@ -30,6 +31,11 @@ def forecast_no2(horizon_days: int = 7, days_back: int = 180) -> dict:
     fit = model.fit()
     forecast = fit.forecast(horizon_days)
 
+    forecast_points = [
+        {"date": d.strftime("%Y-%m-%d"), "value": float(v)} for d, v in forecast.items()
+    ]
+    save_forecast(settings.pilot_city, "no2", horizon_days, forecast_points)
+
     return {
         "city": settings.pilot_city,
         "metric": "tropospheric_NO2_column_number_density",
@@ -38,8 +44,5 @@ def forecast_no2(horizon_days: int = 7, days_back: int = 180) -> dict:
         "history_start": series.index.min().strftime("%Y-%m-%d"),
         "history_end": series.index.max().strftime("%Y-%m-%d"),
         "horizon_days": horizon_days,
-        "forecast": [
-            {"date": d.strftime("%Y-%m-%d"), "value": float(v)}
-            for d, v in forecast.items()
-        ],
+        "forecast": forecast_points,
     }

@@ -12,3 +12,4 @@ scikit-learn
 shap
 gymnasium
 stable-baselines3
+sqlalchemy

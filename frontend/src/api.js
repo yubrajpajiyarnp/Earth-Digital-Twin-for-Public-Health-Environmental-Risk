@@ -24,6 +24,25 @@ async function getJson(path, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
   }
 }
 
+// Admin requests carry the admin email as a plain header — see backend/app/core/admin.py
+// for why this is intentionally not real authentication.
+async function adminRequest(method, path, adminEmail, body) {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(adminEmail ? { 'X-Admin-Email': adminEmail } : {}),
+    },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  })
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => null)
+    throw new Error(errBody?.detail || `Request failed (${res.status})`)
+  }
+  if (res.status === 204) return null
+  return res.json()
+}
+
 export const api = {
   health: () => getJson('/health'),
   aqiProxy: () => getJson('/aqi-proxy'),
@@ -47,4 +66,23 @@ export const api = {
       `/optimize/budget?budget=${budget}${fuelPriceInr ? `&fuel_price_inr=${fuelPriceInr}` : ''}`,
     ),
   knowledgeGraph: () => getJson('/knowledge-graph'),
+
+  historyNo2: (limitDays = 365) => getJson(`/history/no2?limit_days=${limitDays}`),
+  historyNdvi: (limitDays = 365) => getJson(`/history/ndvi?limit_days=${limitDays}`),
+  historyRainfall: (limitDays = 365) => getJson(`/history/rainfall?limit_days=${limitDays}`),
+  historyFauna: (limit = 365) => getJson(`/history/fauna?limit=${limit}`),
+  forecastAccuracy: (indicator = 'no2') => getJson(`/history/forecast-accuracy?indicator=${indicator}`),
+
+  adminWhoami: (email) => adminRequest('GET', '/admin/whoami', email),
+  adminDeleteHistory: (email, indicator, id) =>
+    adminRequest('DELETE', `/admin/history/${indicator}/${id}`, email),
+  adminListSettings: (email) => adminRequest('GET', '/admin/settings', email),
+  adminSetSetting: (email, key, value) =>
+    adminRequest('POST', '/admin/settings', email, { key, value }),
+  adminDeleteSetting: (email, key) => adminRequest('DELETE', `/admin/settings/${key}`, email),
+  adminListKgEdges: (email) => adminRequest('GET', '/admin/knowledge-graph/edges', email),
+  adminUpsertKgEdge: (email, edge) =>
+    adminRequest('POST', '/admin/knowledge-graph/edges', email, edge),
+  adminDeleteKgEdge: (email, id) =>
+    adminRequest('DELETE', `/admin/knowledge-graph/edges/${id}`, email),
 }
