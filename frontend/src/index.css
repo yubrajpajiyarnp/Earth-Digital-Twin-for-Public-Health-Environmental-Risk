@@ -817,6 +817,28 @@ button.run-btn:disabled {
   }
 }
 
+/* ---------- Next refresh countdown ---------- */
+
+.next-refresh {
+  padding: 16px 20px;
+}
+
+.next-refresh .label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 6px;
+}
+
+.next-refresh-value {
+  font-size: 26px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--series-1);
+}
+
 /* ---------- Live price badges ---------- */
 
 .price-badge-row {
@@ -1187,4 +1209,99 @@ button.run-btn:disabled {
 .admin-cancel-btn {
   color: var(--text-muted);
   background: var(--surface-2);
+}
+
+/* ---------- Data sources (admin) ---------- */
+
+.data-source-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.data-source-row {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 10px);
+  background: var(--surface-2);
+}
+
+.data-source-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.data-source-indicator {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.data-source-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.data-source-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.data-source-provider {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.data-source-detail {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* ---------- Dashboard summary card ---------- */
+
+.summary-indicator-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.summary-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 12.5px;
+}
+
+.summary-indicator-name {
+  font-weight: 600;
+}
+
+.summary-indicator-pct {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.summary-text p {
+  font-size: 14px;
+  line-height: 1.65;
+  margin-bottom: 12px;
+}
+
+.summary-text p:last-child {
+  margin-bottom: 0;
 }

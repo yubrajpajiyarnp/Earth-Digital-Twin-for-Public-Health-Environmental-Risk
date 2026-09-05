@@ -4,11 +4,14 @@ from app.core.config import settings
 from app.services.cv.ndvi_timeseries import fetch_ndvi_series
 from app.services.knowledge_graph.anomaly import classify_anomaly
 from app.services.knowledge_graph.graph import build_health_risk_graph
+from app.services.llm.narrative import enrich_risk_explanation
 
 _MIN_SCENES = 8
 
 
-def assess_vegetation_risk(days_back: int = 365, recent_window_days: int = 60) -> dict:
+def assess_vegetation_risk(
+    days_back: int = 365, recent_window_days: int = 60, include_llm_explanations: bool = True
+) -> dict:
     """Compare recent NDVI (vegetation greenness) near the pilot city against its own
     longer-term baseline to flag vegetation-loss / deforestation-linked risk, propagated
     through the knowledge graph to temperature_rise.
@@ -43,6 +46,11 @@ def assess_vegetation_risk(days_back: int = 365, recent_window_days: int = 60) -
     graph = build_health_risk_graph()
     outcomes = []
     for _, outcome, data in graph.out_edges("deforestation", data=True):
+        template_explanation = (
+            f"Recent vegetation greenness (NDVI) near {settings.pilot_city} averages "
+            f"{pct_change:+.1f}% relative to its {days_back}-day baseline, which is "
+            f"{level} for this location. {data['mechanism']}"
+        )
         outcomes.append(
             {
                 "outcome": outcome,
@@ -50,9 +58,17 @@ def assess_vegetation_risk(days_back: int = 365, recent_window_days: int = 60) -
                 "mechanism": data["mechanism"],
                 "citation": data["citation"],
                 "explanation": (
-                    f"Recent vegetation greenness (NDVI) near {settings.pilot_city} averages "
-                    f"{pct_change:+.1f}% relative to its {days_back}-day baseline, which is "
-                    f"{level} for this location. {data['mechanism']}"
+                    enrich_risk_explanation(
+                        city=settings.pilot_city,
+                        indicator_label="vegetation greenness (NDVI)",
+                        risk_level=level,
+                        pct_change=pct_change,
+                        mechanism=data["mechanism"],
+                        outcome=outcome,
+                        fallback=template_explanation,
+                    )
+                    if include_llm_explanations
+                    else template_explanation
                 ),
             }
         )

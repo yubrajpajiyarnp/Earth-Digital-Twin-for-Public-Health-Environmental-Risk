@@ -4,11 +4,14 @@ from app.core.config import settings
 from app.services.fauna.gbif_observations import fetch_monthly_occurrence_counts
 from app.services.knowledge_graph.anomaly import classify_anomaly
 from app.services.knowledge_graph.graph import build_health_risk_graph
+from app.services.llm.narrative import enrich_risk_explanation
 
 _MIN_MONTHS = 6
 
 
-def assess_fauna_disruption(num_months: int = 13, chunk_days: int = 30) -> dict:
+def assess_fauna_disruption(
+    num_months: int = 13, chunk_days: int = 30, include_llm_explanations: bool = True
+) -> dict:
     """Compare the most recent month's GBIF wildlife-observation count against the
     distribution of counts over the preceding months, then propagate that anomaly
     through the knowledge graph to fauna_disruption.
@@ -42,6 +45,15 @@ def assess_fauna_disruption(num_months: int = 13, chunk_days: int = 30) -> dict:
     graph = build_health_risk_graph()
     outcomes = []
     for _, outcome, data in graph.out_edges("wildlife_activity", data=True):
+        template_explanation = (
+            f"GBIF recorded {recent_count} wildlife observations near "
+            f"{settings.pilot_city} in the most recent {chunk_days}-day window, "
+            f"{pct_change:+.1f}% relative to the prior {len(baseline_counts)} "
+            f"months' typical count, which is {level} for this location (note: "
+            "recent-month counts can read low simply from GBIF publishing lag, "
+            "not necessarily reduced activity). "
+            f"{data['mechanism']}"
+        )
         outcomes.append(
             {
                 "outcome": outcome,
@@ -49,13 +61,24 @@ def assess_fauna_disruption(num_months: int = 13, chunk_days: int = 30) -> dict:
                 "mechanism": data["mechanism"],
                 "citation": data["citation"],
                 "explanation": (
-                    f"GBIF recorded {recent_count} wildlife observations near "
-                    f"{settings.pilot_city} in the most recent {chunk_days}-day window, "
-                    f"{pct_change:+.1f}% relative to the prior {len(baseline_counts)} "
-                    f"months' typical count, which is {level} for this location (note: "
-                    "recent-month counts can read low simply from GBIF publishing lag, "
-                    "not necessarily reduced activity). "
-                    f"{data['mechanism']}"
+                    enrich_risk_explanation(
+                        city=settings.pilot_city,
+                        indicator_label="wildlife observation activity (GBIF)",
+                        risk_level=level,
+                        pct_change=pct_change,
+                        mechanism=data["mechanism"],
+                        outcome=outcome,
+                        extra_context=(
+                            f"{recent_count} observations in the most recent "
+                            f"{chunk_days}-day window vs. a typical baseline from the prior "
+                            f"{len(baseline_counts)} months. Recent-month counts can read low "
+                            "simply from GBIF publishing lag, not necessarily reduced activity — "
+                            "mention this caveat."
+                        ),
+                        fallback=template_explanation,
+                    )
+                    if include_llm_explanations
+                    else template_explanation
                 ),
             }
         )

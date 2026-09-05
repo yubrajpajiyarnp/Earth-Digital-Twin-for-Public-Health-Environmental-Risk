@@ -127,11 +127,10 @@ export default function KnowledgeGraphDiagram({ nodes, edges }) {
         ))}
       </svg>
       <figcaption className="caption" style={{ marginTop: 12 }}>
-        Environmental indicators (left) linked to health/environmental outcomes (right).{' '}
-        <span style={{ color: 'var(--series-1)', fontWeight: 600 }}>Solid blue</span> = backed
-        by a live data pipeline; <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>
-        dashed gray</span> = relationship encoded but not yet wired to real data. Hover an
-        arrow for the underlying mechanism.
+        Environmental indicators (left) linked to health and environmental outcomes (right).{' '}
+        <span style={{ color: 'var(--series-1)', fontWeight: 600 }}>Solid blue</span> = live
+        data; <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>
+        dashed gray</span> = not tracked yet. Hover an arrow to see how it works.
       </figcaption>
     </figure>
   )

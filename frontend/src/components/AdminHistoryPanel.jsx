@@ -50,8 +50,8 @@ export default function AdminHistoryPanel() {
     <div className="card">
       <h2>Stored history</h2>
       <p className="scenario-desc">
-        Rows accumulate automatically every time the corresponding live panel is used
-        elsewhere in the dashboard. Delete any bad or unwanted readings here.
+        Rows are added automatically as the live panels are used. Delete any bad readings
+        here.
       </p>
       <TabBar tabs={INDICATOR_TABS} activeId={indicator} onChange={setIndicator} />
 
@@ -64,8 +64,7 @@ export default function AdminHistoryPanel() {
 
       {rows && rows.length === 0 && (
         <p className="empty-hint">
-          No stored rows yet for this indicator — visit its live panel elsewhere in the
-          dashboard to populate history.
+          No data yet — open the matching panel to start collecting history.
         </p>
       )}
 

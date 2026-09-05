@@ -4,6 +4,8 @@ import StatTile from './StatTile'
 import StatusPill from './StatusPill'
 import LineChart from './LineChart'
 import OutcomeCard from './OutcomeCard'
+import VegetationScaleLegend from './VegetationScaleLegend'
+import { classifyVegetationLevel, zScore } from '../vegetationLevels'
 
 export default function VegetationPanel() {
   const [ndvi, setNdvi] = useState(null)
@@ -34,26 +36,36 @@ export default function VegetationPanel() {
   }
 
   const current = ndvi.series[ndvi.series.length - 1]
+  const currentZ = zScore(current.value, risk.baseline_mean, risk.baseline_std)
+  const currentLevel = classifyVegetationLevel(currentZ)
+  const recentZ = zScore(risk.recent_mean, risk.baseline_mean, risk.baseline_std)
+  const recentLevel = classifyVegetationLevel(recentZ)
 
   return (
     <>
       <div className="grid">
         <StatTile
           label="NDVI (latest scene)"
-          value={current.value.toFixed(3)}
-          caption={`${current.date} · ${ndvi.scene_count} usable scenes over the trailing year`}
+          value={currentLevel?.label ?? '—'}
+          valueColor={currentLevel?.color}
+          caption={`${current.value.toFixed(3)} · ${current.date} · ${ndvi.scene_count} usable scenes over the trailing year`}
           accent="var(--series-3)"
         />
         <StatTile
           label={`Recent avg (last ${risk.recent_window_days}d)`}
-          value={risk.recent_mean.toFixed(3)}
-          caption={`${risk.pct_change_vs_baseline >= 0 ? '+' : ''}${risk.pct_change_vs_baseline.toFixed(1)}% vs 365-day baseline`}
+          value={recentLevel?.label ?? '—'}
+          valueColor={recentLevel?.color}
+          caption={`${risk.recent_mean.toFixed(3)} · ${risk.pct_change_vs_baseline >= 0 ? '+' : ''}${risk.pct_change_vs_baseline.toFixed(1)}% vs 365-day baseline`}
           accent="var(--series-3)"
         />
         <div className="card stat-tile" style={{ '--stat-accent': 'var(--status-critical)' }}>
           <div className="label">Deforestation risk</div>
           <StatusPill level={risk.risk_level} />
         </div>
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <VegetationScaleLegend baselineMean={risk.baseline_mean} baselineStd={risk.baseline_std} />
       </div>
 
       <div className="card">
@@ -65,8 +77,7 @@ export default function VegetationPanel() {
           formatLabel={(d) => d.slice(0, 7)}
         />
         <div className="caption">
-          Cloud-masked Sentinel-2 scenes only — gaps (e.g. monsoon months) are real missing
-          data, not interpolated.
+          Cloud-masked Sentinel-2 data. Gaps like monsoon months are real — not filled in.
         </div>
       </div>
 

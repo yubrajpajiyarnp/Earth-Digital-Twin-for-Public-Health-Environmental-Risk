@@ -30,6 +30,7 @@ from stable_baselines3 import PPO
 from app.core.config import settings
 from app.services.cv.ndvi_timeseries import fetch_ndvi_series
 from app.services.cv.no2_timeseries import fetch_no2_daily_series
+from app.services.llm.narrative import enrich_optimizer_explanation
 from app.services.pricing.carbon_price import get_carbon_price_usd_per_ton
 from app.services.pricing.fuel_price import get_petrol_price_inr_per_litre
 from app.services.rl.env import (
@@ -116,10 +117,40 @@ def optimize_budget_allocation(
     except RuntimeError as exc:
         carbon_price_error = str(exc)
 
+    no_spend = info["reduction_pct"] < 0.1 and info["area_pct"] < 0.1
+    fallback_explanation = (
+        "No meaningful elevated risk was found for this budget to reduce, so no spend is "
+        "recommended — re-run this during a period of worse air quality or vegetation loss "
+        "to see a real allocation."
+        if no_spend
+        else (
+            f"Of the ₹{budget:.0f} budget, ₹{info['traffic_budget']:.1f} is recommended for "
+            f"traffic reduction ({info['reduction_pct']:.1f}%) and "
+            f"₹{info['afforest_budget']:.1f} for afforestation "
+            f"({info['area_pct']:.1f}% of the buffer area), projecting NO2 to "
+            f"{info['no2_projected']:.3e} mol/m² and NDVI to {info['ndvi_projected']:.3f}, "
+            f"for a residual risk score of {info['risk_after']:.3f}."
+        )
+    )
+    explanation = enrich_optimizer_explanation(
+        city=settings.pilot_city,
+        budget=budget,
+        traffic_budget=info["traffic_budget"],
+        reduction_pct=info["reduction_pct"],
+        afforest_budget=info["afforest_budget"],
+        area_pct=info["area_pct"],
+        projected_no2=info["no2_projected"],
+        projected_ndvi=info["ndvi_projected"],
+        projected_risk_score=info["risk_after"],
+        carbon_value_usd=estimated_carbon_value_usd,
+        fallback=fallback_explanation,
+    )
+
     return {
         "city": settings.pilot_city,
         "budget": budget,
         "training_steps": training_steps,
+        "explanation": explanation,
         "pricing": {
             "fuel_price_inr_per_litre": fuel_price_inr,
             "fuel_price_source": fuel_price_source,
@@ -134,14 +165,13 @@ def optimize_budget_allocation(
             "cost_per_pct_afforestation": COST_PER_PCT_AFFORESTATION,
             "co2_tons_per_pct_traffic_reduction": CO2_TONS_PER_PCT_TRAFFIC_REDUCTION,
             "note": (
-                "Budget and allocation amounts are in ₹ but on an illustrative, toy scale — "
+                "Budget and allocation amounts are in ₹ but on an illustrative, toy scale, "
                 "not a real-world program budget. Afforestation cost and the "
-                "CO2-tons-per-%-reduction figure are stated illustrative assumptions (no "
-                "local costing/emissions data exists to calibrate them). Traffic-reduction "
-                "cost scales with a fuel price you enter manually if provided, else a live "
-                "API price if configured, else falls back to the illustrative default; "
-                "carbon value uses a live market price when CARBON_PRICE_API_KEY is set. "
-                "See CLAUDE.md."
+                "CO2-tons-per-%-reduction figure are stated illustrative assumptions — "
+                "there's no local costing or emissions data to calibrate them against yet. "
+                "Traffic-reduction cost scales with a fuel price you enter manually if "
+                "provided, else a live price feed if configured, else an illustrative "
+                "default; carbon value uses a live market price when configured."
             ),
         },
         "recommended_allocation": {

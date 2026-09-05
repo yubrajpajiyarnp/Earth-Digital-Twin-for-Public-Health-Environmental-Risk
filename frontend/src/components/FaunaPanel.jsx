@@ -32,11 +32,11 @@ export default function FaunaPanel() {
   return (
     <>
       <div className="info-banner" style={{ marginTop: 0, marginBottom: 16 }}>
-        <strong>Read this before trusting the numbers below.</strong> This tracks GBIF
-        species-observation counts (citizen-science platforms like iNaturalist) near
-        Vellore — a real but noisy signal, confounded by how many people were out
-        reporting, not just what's actually there. The most recent month in particular
-        often reads low simply because of GBIF's publishing lag, not a real activity drop.
+        <strong>A note on this data.</strong> These are wildlife sightings reported by
+        people (apps like iNaturalist) near Vellore, not a real population survey — more
+        reports doesn't always mean more animals, just more people looking. The most recent
+        month in particular tends to look low simply because reports take time to appear,
+        not because activity actually dropped.
       </div>
 
       <div className="grid">
@@ -66,8 +66,7 @@ export default function FaunaPanel() {
           formatLabel={(d) => d.slice(0, 7)}
         />
         <div className="caption">
-          Total species occurrence records within ~50km of Vellore, per trailing 30-day
-          window (all taxa, all data providers feeding GBIF).
+          Total species sightings within ~50km of Vellore, in trailing 30-day windows.
         </div>
       </div>
 

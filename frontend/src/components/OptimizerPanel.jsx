@@ -46,8 +46,7 @@ export default function OptimizerPanel() {
       <p style={{ fontSize: 13, marginBottom: 12 }}>
         Trains a fresh PPO policy against the live NO₂/NDVI baseline to split a fixed budget
         between traffic reduction and afforestation, priced against fuel and carbon markets.
-        Amounts are in ₹ but on an illustrative scale, not a real-world program budget — see
-        the note below the results.
+        Amounts are in ₹ but on an illustrative scale, not a real-world program budget.
       </p>
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
         <div className="field" style={{ maxWidth: 200 }}>
@@ -76,8 +75,8 @@ export default function OptimizerPanel() {
         </div>
       </div>
       <p className="empty-hint" style={{ marginTop: -8, marginBottom: 16 }}>
-        Enter today's local petrol price to price traffic-reduction spend accurately. Leave
-        blank to use a live price feed if configured, or an illustrative default otherwise.
+        Enter today's petrol price for a more accurate estimate. Leave blank to use a live
+        price feed if one's configured, or a default otherwise.
       </p>
       <button className="run-btn" onClick={handleRun} disabled={loading}>
         {loading ? 'Training policy… (10-20s)' : 'Optimize allocation'}
@@ -106,14 +105,13 @@ export default function OptimizerPanel() {
         <>
           {alloc.traffic_reduction_pct < 0.1 && alloc.afforestation_area_pct < 0.1 && (
             <div className="info-banner">
-              <strong>No spend recommended.</strong> Vellore's current NO₂ and vegetation
-              levels are already at or better than their own recent baseline (risk score{' '}
-              {result.projected_risk_score.toFixed(3)}, effectively zero) — there's no
-              elevated risk for this budget to reduce, so spending anything would only add
-              cost with no benefit. This isn't a stuck calculation; re-run it during a
-              period of worse air quality or vegetation loss to see a real allocation.
+              <strong>No spend recommended.</strong> Vellore's air quality and vegetation are
+              already at or better than their own recent normal, so there's no real risk left
+              to spend this budget on. Try again during a period of worse air quality or
+              vegetation loss to see an actual allocation.
             </div>
           )}
+          {result.explanation && <p style={{ fontSize: 13, marginTop: 12 }}>{result.explanation}</p>}
           <div className="grid" style={{ marginTop: 16, marginBottom: 0 }}>
             <div>
               <div className="label" style={{ fontSize: 13, color: 'var(--text-muted)' }}>

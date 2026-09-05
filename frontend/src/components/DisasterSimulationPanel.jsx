@@ -24,6 +24,7 @@ function formatInr(value) {
 export default function DisasterSimulationPanel() {
   const [disasterType, setDisasterType] = useState('flood')
   const [severity, setSeverity] = useState(50)
+  const [population, setPopulation] = useState('')
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -31,8 +32,9 @@ export default function DisasterSimulationPanel() {
   function handleRun() {
     setLoading(true)
     setError(null)
+    const populationValue = population.trim() === '' ? undefined : Number(population)
     api
-      .simulateDisaster(disasterType, severity)
+      .simulateDisaster(disasterType, severity, populationValue)
       .then(setResult)
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
@@ -54,9 +56,8 @@ export default function DisasterSimulationPanel() {
     <div className="card">
       <h2>What if: disaster event</h2>
       <p className="scenario-desc">
-        Simulate a disaster and see the projected effect on health, vegetation, and
-        wildlife where a real causal link exists, plus a reconstruction-fund estimate
-        broken down by infrastructure category and rebuild priority.
+        See how a disaster could affect health, vegetation, and wildlife, plus an estimated
+        reconstruction cost broken down by category.
       </p>
 
       <TabBar tabs={DISASTER_TABS} activeId={disasterType} onChange={handleTypeChange} />
@@ -80,6 +81,24 @@ export default function DisasterSimulationPanel() {
         </div>
       </div>
 
+      <div className="field" style={{ maxWidth: 280 }}>
+        <label>
+          <span>Population in affected area (optional)</span>
+        </label>
+        <input
+          type="number"
+          min={1}
+          step="1"
+          placeholder="e.g. 50000"
+          value={population}
+          onChange={(e) => setPopulation(e.target.value)}
+        />
+      </div>
+      <p className="empty-hint" style={{ marginTop: -8, marginBottom: 16 }}>
+        Enter an estimated population for the area to scale the reconstruction cost to it.
+        Leave blank to use a generic figure instead.
+      </p>
+
       <button className="run-btn" onClick={handleRun} disabled={loading}>
         {loading ? 'Simulating…' : result ? 'Recalculate' : `Simulate ${disasterType}`}
       </button>
@@ -89,8 +108,8 @@ export default function DisasterSimulationPanel() {
       {!result && !loading && !error && (
         <p className="empty-hint">
           {disasterType === 'earthquake'
-            ? "Earthquakes aren't weather-driven, so this only estimates reconstruction cost — no environmental risk outcomes."
-            : "Queries live environmental data, so it's slower than the intervention scenarios above (up to ~60s)."}
+            ? "Earthquakes aren't weather-driven, so this only estimates reconstruction cost, not environmental risk."
+            : 'Uses live satellite data, so this can take up to a minute.'}
         </p>
       )}
 
@@ -137,9 +156,11 @@ export default function DisasterSimulationPanel() {
             <div className="reconstruction-label">Estimated reconstruction fund</div>
             <div className="reconstruction-value">{formatInr(rec.estimated_cost_inr)}</div>
             <div className="caption" style={{ marginBottom: 12 }}>
-              for an estimated{' '}
-              {Math.round(rec.affected_population_estimate).toLocaleString('en-IN')} affected
-              people
+              ≈{Math.round(rec.affected_population_estimate).toLocaleString('en-IN')} people
+              affected, out of{' '}
+              {rec.population_is_estimated
+                ? `a placeholder population of ${Math.round(rec.population_used).toLocaleString('en-IN')}`
+                : `the ${Math.round(rec.population_used).toLocaleString('en-IN')} you entered`}
             </div>
 
             <div className="reconstruction-label" style={{ marginTop: 12, marginBottom: 8 }}>

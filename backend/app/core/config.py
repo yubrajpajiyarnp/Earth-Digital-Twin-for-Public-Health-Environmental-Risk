@@ -22,5 +22,15 @@ class Settings(BaseSettings):
     # Carbonmark sandbox — Bearer token for https://v19.api.carbonmark.com
     carbon_price_api_key: str | None = None
 
+    # Local Ollama server used to turn computed numbers into natural-language explanations.
+    # Never used for the numeric predictions themselves — see app/services/llm/narrative.py.
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "mistral"
+    llm_narrative_enabled: bool = True
+
+    # AccuWeather — failsafe fallback for current_weather.py, only called if the primary
+    # Open-Meteo request fails. Free-tier key from developer.accuweather.com.
+    accuweather_api_key: str | None = None
+
 
 settings = Settings()

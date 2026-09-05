@@ -12,6 +12,8 @@ import KnowledgeGraphPanel from './components/KnowledgeGraphPanel'
 import AdminPanel from './components/AdminPanel'
 import AdminLogin from './components/AdminLogin'
 import RiskScaleLegend from './components/RiskScaleLegend'
+import ConditionsBar from './components/ConditionsBar'
+import DashboardSummaryCard from './components/DashboardSummaryCard'
 import TabBar from './components/TabBar'
 
 const ENV_TABS = [
@@ -53,18 +55,25 @@ function App() {
         <AdminLogin />
       </nav>
 
+      <div style={{ marginTop: 20 }}>
+        <ConditionsBar />
+      </div>
+
       <header className="app-header">
         <div className="app-header-main">
           <span className="eyebrow">Live · {city || '…'}</span>
           <h1>Environmental &amp; public-health risk, in real time</h1>
           <p className="subtitle">
-            Satellite-derived air quality, vegetation, rainfall, and wildlife data, forecast
-            forward, explained causally, and stress-tested against intervention and disaster
-            scenarios.
+            Live satellite data on air quality, vegetation, rainfall, and wildlife — forecast,
+            explained, and tested against real intervention and disaster scenarios.
           </p>
         </div>
         <RiskScaleLegend />
       </header>
+
+      <div style={{ marginBottom: 16 }}>
+        <DashboardSummaryCard />
+      </div>
 
       <section className="block" id="air-quality">
         <div className="section-head">

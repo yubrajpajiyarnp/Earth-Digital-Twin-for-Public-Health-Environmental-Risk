@@ -45,6 +45,8 @@ async function adminRequest(method, path, adminEmail, body) {
 
 export const api = {
   health: () => getJson('/health'),
+  weather: () => getJson('/weather'),
+  summary: () => getJson('/summary'),
   aqiProxy: () => getJson('/aqi-proxy'),
   forecastAqi: (horizonDays = 7) => getJson(`/forecast/aqi?horizon_days=${horizonDays}`),
   riskAqi: (horizonDays = 7) => getJson(`/risk/aqi?horizon_days=${horizonDays}`),
@@ -59,8 +61,10 @@ export const api = {
     getJson(`/simulate/traffic-reduction?reduction_pct=${reductionPct}`),
   simulateAfforestation: (areaPct) =>
     getJson(`/simulate/afforestation?area_pct=${areaPct}`),
-  simulateDisaster: (disasterType, severityPct) =>
-    getJson(`/simulate/disaster?disaster_type=${disasterType}&severity_pct=${severityPct}`),
+  simulateDisaster: (disasterType, severityPct, population) =>
+    getJson(
+      `/simulate/disaster?disaster_type=${disasterType}&severity_pct=${severityPct}${population ? `&population=${population}` : ''}`,
+    ),
   optimizeBudget: (budget, fuelPriceInr) =>
     getJson(
       `/optimize/budget?budget=${budget}${fuelPriceInr ? `&fuel_price_inr=${fuelPriceInr}` : ''}`,
@@ -74,6 +78,7 @@ export const api = {
   forecastAccuracy: (indicator = 'no2') => getJson(`/history/forecast-accuracy?indicator=${indicator}`),
 
   adminWhoami: (email) => adminRequest('GET', '/admin/whoami', email),
+  adminDataSources: (email) => adminRequest('GET', '/admin/data-sources', email),
   adminDeleteHistory: (email, indicator, id) =>
     adminRequest('DELETE', `/admin/history/${indicator}/${id}`, email),
   adminListSettings: (email) => adminRequest('GET', '/admin/settings', email),

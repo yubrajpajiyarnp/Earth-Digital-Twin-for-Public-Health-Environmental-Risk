@@ -4,6 +4,7 @@ from sklearn.ensemble import RandomForestRegressor
 
 from app.core.config import settings
 from app.services.cv.no2_timeseries import fetch_no2_daily_series
+from app.services.llm.narrative import enrich_forecast_summary
 from app.services.xai.features import build_feature_frame
 
 _MIN_ROWS_TO_EXPLAIN = 40  # need enough rows left after dropping NaNs from lag_7/rolling_30
@@ -74,7 +75,13 @@ def explain_latest_prediction(days_back: int = 180) -> dict:
         "predicted_value": predicted,
         "actual_value": actual,
         "contributions": contributions,
-        "summary": _summarize(contributions, base_value, predicted),
+        "summary": enrich_forecast_summary(
+            contributions,
+            base_value,
+            predicted,
+            actual,
+            fallback=_summarize(contributions, base_value, predicted),
+        ),
     }
 
 

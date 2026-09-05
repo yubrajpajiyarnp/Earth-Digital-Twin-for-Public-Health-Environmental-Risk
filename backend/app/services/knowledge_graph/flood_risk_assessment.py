@@ -2,11 +2,14 @@ from app.core.config import settings
 from app.services.cv.rainfall_timeseries import fetch_rainfall_daily_series
 from app.services.knowledge_graph.anomaly import classify_anomaly
 from app.services.knowledge_graph.graph import build_health_risk_graph
+from app.services.llm.narrative import enrich_risk_explanation
 
 _MIN_DAYS = 21  # need enough days for a rolling window + a meaningful baseline distribution
 
 
-def assess_flood_risk(days_back: int = 180, recent_window_days: int = 7) -> dict:
+def assess_flood_risk(
+    days_back: int = 180, recent_window_days: int = 7, include_llm_explanations: bool = True
+) -> dict:
     """Compare the most recent `recent_window_days`-day rainfall TOTAL (not daily mean —
     flood risk is about short-window accumulation, e.g. a week of heavy rain, not a
     single wet day) against the distribution of same-length rolling totals over the
@@ -36,6 +39,13 @@ def assess_flood_risk(days_back: int = 180, recent_window_days: int = 7) -> dict
     graph = build_health_risk_graph()
     outcomes = []
     for _, outcome, data in graph.out_edges("rainfall_extreme", data=True):
+        template_explanation = (
+            f"The last {recent_window_days} days of rainfall near "
+            f"{settings.pilot_city} totaled {recent_sum:.1f}mm, "
+            f"{pct_change:+.1f}% relative to the typical {recent_window_days}-day "
+            f"total over the past {days_back} days, which is {level} for this "
+            f"location. {data['mechanism']}"
+        )
         outcomes.append(
             {
                 "outcome": outcome,
@@ -43,11 +53,21 @@ def assess_flood_risk(days_back: int = 180, recent_window_days: int = 7) -> dict
                 "mechanism": data["mechanism"],
                 "citation": data["citation"],
                 "explanation": (
-                    f"The last {recent_window_days} days of rainfall near "
-                    f"{settings.pilot_city} totaled {recent_sum:.1f}mm, "
-                    f"{pct_change:+.1f}% relative to the typical {recent_window_days}-day "
-                    f"total over the past {days_back} days, which is {level} for this "
-                    f"location. {data['mechanism']}"
+                    enrich_risk_explanation(
+                        city=settings.pilot_city,
+                        indicator_label=f"{recent_window_days}-day rainfall total",
+                        risk_level=level,
+                        pct_change=pct_change,
+                        mechanism=data["mechanism"],
+                        outcome=outcome,
+                        extra_context=(
+                            f"Recent {recent_window_days}-day rainfall total: "
+                            f"{recent_sum:.1f}mm."
+                        ),
+                        fallback=template_explanation,
+                    )
+                    if include_llm_explanations
+                    else template_explanation
                 ),
             }
         )

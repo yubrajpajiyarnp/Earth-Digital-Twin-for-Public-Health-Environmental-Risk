@@ -4,6 +4,8 @@ from pydantic import BaseModel
 from app.core.admin import require_admin
 from app.core.config import settings
 from app.db import crud
+from app.services.admin.data_sources import get_data_source_status
+from app.services.llm.dashboard_summary import build_dashboard_summary
 from app.services.cv.aqi_proxy import get_no2_proxy
 from app.services.cv.ndvi_timeseries import fetch_ndvi_series
 from app.services.cv.rainfall_timeseries import fetch_rainfall_daily_series
@@ -19,6 +21,7 @@ from app.services.pricing.fuel_price import get_petrol_price_inr_per_litre
 from app.services.rl.optimizer import optimize_budget_allocation
 from app.services.simulation.disaster_engine import DISASTER_TYPES, simulate_disaster
 from app.services.simulation.engine import simulate_afforestation, simulate_traffic_reduction
+from app.services.weather.current_weather import get_current_weather
 from app.services.xai.explain_forecast import explain_latest_prediction
 
 router = APIRouter()
@@ -27,6 +30,22 @@ router = APIRouter()
 @router.get("/health")
 def health():
     return {"status": "ok", "pilot_city": settings.pilot_city}
+
+
+@router.get("/weather")
+def weather():
+    try:
+        return get_current_weather()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.get("/summary")
+def dashboard_summary():
+    try:
+        return build_dashboard_summary()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @router.get("/aqi-proxy")
@@ -130,13 +149,13 @@ def risk_fauna(num_months: int = 13):
 
 
 @router.get("/simulate/disaster")
-def simulate_disaster_route(disaster_type: str, severity_pct: float):
+def simulate_disaster_route(disaster_type: str, severity_pct: float, population: float | None = None):
     if disaster_type not in DISASTER_TYPES:
         raise HTTPException(
             status_code=400, detail=f"disaster_type must be one of {DISASTER_TYPES}"
         )
     try:
-        return simulate_disaster(disaster_type, severity_pct)
+        return simulate_disaster(disaster_type, severity_pct, population=population)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
@@ -255,6 +274,11 @@ def history_forecast_accuracy(indicator: str = "no2", limit: int = 200):
 @router.get("/admin/whoami")
 def admin_whoami(email: str = Depends(require_admin)):
     return {"ok": True, "email": email}
+
+
+@router.get("/admin/data-sources")
+def admin_data_sources(_: str = Depends(require_admin)):
+    return {"sources": get_data_source_status()}
 
 
 @router.delete("/admin/history/{indicator}/{row_id}")

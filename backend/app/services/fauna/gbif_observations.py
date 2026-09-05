@@ -1,3 +1,4 @@
+import time
 from datetime import date, timedelta
 
 import httpx
@@ -7,25 +8,40 @@ from app.db.crud import save_fauna_windows
 
 _URL = "https://api.gbif.org/v1/occurrence/search"
 
+# fetch_monthly_occurrence_counts makes _NUM_RETRIES+1 * num_months sequential requests in
+# the worst case, so a single transient GBIF blip (rate-limit, brief timeout) used to fail
+# the ENTIRE series — which is disproportionate for a wildlife-observation *count* that's
+# already the noisiest signal in the app. Retry each individual window a couple times with
+# a short backoff before giving up on it.
+_NUM_RETRIES = 2
+_RETRY_BACKOFF_SECONDS = 1.5
+
 
 def _get_occurrence_count(start: date, end: date, radius_deg: float) -> int:
     lat_range = f"{settings.pilot_lat - radius_deg},{settings.pilot_lat + radius_deg}"
     lon_range = f"{settings.pilot_lon - radius_deg},{settings.pilot_lon + radius_deg}"
-    try:
-        resp = httpx.get(
-            _URL,
-            params={
-                "decimalLatitude": lat_range,
-                "decimalLongitude": lon_range,
-                "eventDate": f"{start.isoformat()},{end.isoformat()}",
-                "limit": 0,
-            },
-            timeout=15,
-        )
-        resp.raise_for_status()
-        return resp.json()["count"]
-    except httpx.HTTPError as exc:
-        raise RuntimeError(f"GBIF occurrence API request failed: {exc}") from exc
+    last_error = None
+    for attempt in range(_NUM_RETRIES + 1):
+        try:
+            resp = httpx.get(
+                _URL,
+                params={
+                    "decimalLatitude": lat_range,
+                    "decimalLongitude": lon_range,
+                    "eventDate": f"{start.isoformat()},{end.isoformat()}",
+                    "limit": 0,
+                },
+                timeout=15,
+            )
+            resp.raise_for_status()
+            return resp.json()["count"]
+        except httpx.HTTPError as exc:
+            last_error = exc
+            if attempt < _NUM_RETRIES:
+                time.sleep(_RETRY_BACKOFF_SECONDS * (attempt + 1))
+    raise RuntimeError(
+        f"GBIF occurrence API request failed after {_NUM_RETRIES + 1} attempts: {last_error}"
+    ) from last_error
 
 
 def fetch_monthly_occurrence_counts(num_months: int = 13, chunk_days: int = 30, radius_deg: float = 0.45) -> list[dict]:

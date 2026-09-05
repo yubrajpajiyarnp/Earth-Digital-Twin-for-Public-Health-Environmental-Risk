@@ -45,9 +45,10 @@ export default function AdminSettingsPanel() {
     <div className="card">
       <h2>Config overrides</h2>
       <p className="scenario-desc">
-        Key/value overrides checked before the .env-loaded defaults — e.g.{' '}
+        Override any config value normally set in .env — e.g.{' '}
         <code>fuel_price_api_key</code>, <code>fuel_price_client_id</code>,{' '}
-        <code>carbon_price_api_key</code>. Takes effect immediately, no restart.
+        <code>carbon_price_api_key</code>, <code>accuweather_api_key</code>. Applies right
+        away, no restart needed.
       </p>
 
       {error && <div className="error" style={{ marginBottom: 12 }}>{error}</div>}

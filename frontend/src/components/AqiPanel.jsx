@@ -1,9 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
 import StatTile from './StatTile'
 import StatusPill from './StatusPill'
 import LineChart from './LineChart'
 import OutcomeCard from './OutcomeCard'
+import AqiScaleLegend from './AqiScaleLegend'
+import NextRefreshCard from './NextRefreshCard'
+import { classifyAqiLevel, zScore } from '../aqiLevels'
+
+const REFRESH_INTERVAL_SECONDS = 300
 
 function fmtNo2(v) {
   return `${v.toExponential(2)}`
@@ -16,16 +21,21 @@ export default function AqiPanel() {
   const [explain, setExplain] = useState(null)
   const [error, setError] = useState(null)
 
-  useEffect(() => {
+  const loadData = useCallback(() => {
     Promise.all([api.aqiProxy(), api.forecastAqi(7), api.riskAqi(7), api.explainAqi()])
       .then(([p, f, r, e]) => {
         setProxy(p)
         setForecast(f)
         setRisk(r)
         setExplain(e)
+        setError(null)
       })
       .catch((err) => setError(err.message))
   }, [])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
 
   if (error) return <div className="card error">AQI pipeline failed to load: {error}</div>
   if (!proxy || !forecast || !risk || !explain) {
@@ -39,27 +49,41 @@ export default function AqiPanel() {
 
   const maxAbsContribution = Math.max(...explain.contributions.map((c) => Math.abs(c.contribution)))
 
+  const currentZ = zScore(proxy.value, risk.baseline_mean, risk.baseline_std)
+  const currentLevel = classifyAqiLevel(currentZ)
+  const forecastZ = zScore(risk.forecast_mean, risk.baseline_mean, risk.baseline_std)
+  const forecastLevel = classifyAqiLevel(forecastZ)
+
   return (
     <>
       <div className="grid">
+        <NextRefreshCard intervalSeconds={REFRESH_INTERVAL_SECONDS} onRefresh={loadData} />
         <StatTile
           label="NO₂ proxy (current)"
-          value={proxy.value.toExponential(2)}
-          caption={`mol/m² · ${proxy.scene_count} recent Sentinel-5P scenes`}
+          value={proxy.value == null ? 'No data' : currentLevel?.label ?? '—'}
+          valueColor={proxy.value == null ? undefined : currentLevel?.color}
+          caption={
+            proxy.value == null
+              ? `No cloud-free Sentinel-5P pixels in the last ${proxy.scene_count} scenes`
+              : `${proxy.value.toExponential(2)} mol/m² · ${proxy.scene_count} recent Sentinel-5P scenes`
+          }
           accent="var(--series-1)"
         />
         <StatTile
           label="7-day forecast avg"
-          value={(
-            forecast.forecast.reduce((s, p) => s + p.value, 0) / forecast.forecast.length
-          ).toExponential(2)}
-          caption={`${risk.pct_change_vs_baseline >= 0 ? '+' : ''}${risk.pct_change_vs_baseline.toFixed(1)}% vs ${risk.baseline_mean.toExponential(2)} baseline`}
+          value={forecastLevel?.label ?? '—'}
+          valueColor={forecastLevel?.color}
+          caption={`${risk.forecast_mean.toExponential(2)} mol/m² · ${risk.pct_change_vs_baseline >= 0 ? '+' : ''}${risk.pct_change_vs_baseline.toFixed(1)}% vs ${risk.baseline_mean.toExponential(2)} baseline`}
           accent="var(--series-1)"
         />
         <div className="card stat-tile" style={{ '--stat-accent': 'var(--status-critical)' }}>
           <div className="label">Pollution risk</div>
           <StatusPill level={risk.risk_level} />
         </div>
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <AqiScaleLegend baselineMean={risk.baseline_mean} baselineStd={risk.baseline_std} />
       </div>
 
       <div className="grid" style={{ gridTemplateColumns: '2fr 1fr' }}>

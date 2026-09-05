@@ -73,11 +73,20 @@ EST_POPULATION_IN_BUFFER = 50_000
 RECONSTRUCTION_COST_PER_AFFECTED_PERSON_INR = 15_000
 
 
-def estimate_reconstruction_fund(severity_pct: float) -> dict:
+def estimate_reconstruction_fund(severity_pct: float, population: float | None = None) -> dict:
     """Pure (no I/O) illustrative reconstruction-cost estimate, broken down by
-    infrastructure category and sorted by public-usage priority (1 = rebuild first)."""
+    infrastructure category and sorted by public-usage priority (1 = rebuild first).
+
+    `population` lets a caller supply a known/tentative population for the affected area
+    instead of relying on the generic EST_POPULATION_IN_BUFFER placeholder — useful since
+    that constant is a rough stand-in for whatever area a user actually has in mind, not a
+    real headcount for any specific buffer around Vellore.
+    """
+    population_is_estimated = population is None
+    total_population = population if population is not None else EST_POPULATION_IN_BUFFER
+
     affected_fraction = min(1.0, severity_pct / 200)
-    affected_population = affected_fraction * EST_POPULATION_IN_BUFFER
+    affected_population = affected_fraction * total_population
     total_cost = affected_population * RECONSTRUCTION_COST_PER_AFFECTED_PERSON_INR
 
     breakdown = sorted(
@@ -93,20 +102,29 @@ def estimate_reconstruction_fund(severity_pct: float) -> dict:
         key=lambda item: item["priority"],
     )
 
+    population_clause = (
+        f"assumes ~{EST_POPULATION_IN_BUFFER:,} people in the monitored buffer area "
+        "(no population figure was entered)"
+        if population_is_estimated
+        else f"uses the {total_population:,.0f} people you entered for the affected area"
+    )
+
     return {
+        "population_used": total_population,
+        "population_is_estimated": population_is_estimated,
         "affected_population_estimate": affected_population,
         "estimated_cost_inr": total_cost,
         "breakdown_by_category": breakdown,
         "assumption": (
-            f"Illustrative only: assumes ~{EST_POPULATION_IN_BUFFER:,} people in the "
-            f"monitored buffer area and ~₹{RECONSTRUCTION_COST_PER_AFFECTED_PERSON_INR:,} "
-            "reconstruction cost per affected person, order-of-magnitude scaled to "
-            "published Indian SDRF/NDRF disaster-relief norms — NOT the exact current "
-            "government rate (not looked up this session). Category cost-shares and "
-            "rebuild priority are a stated general assumption (roads/water/power ranked "
-            "above schools/other on daily public dependence), not a Vellore-specific "
-            "study. Consult actual SDRF/NDRF documentation and a local infrastructure "
-            "assessment for real figures. See CLAUDE.md."
+            f"Illustrative only: {population_clause}, and "
+            f"~₹{RECONSTRUCTION_COST_PER_AFFECTED_PERSON_INR:,} reconstruction cost per "
+            "affected person, scaled to the order of magnitude of published Indian "
+            "SDRF/NDRF disaster-relief norms rather than the exact current government "
+            "rate. Category cost-shares and rebuild priority reflect a general assumption "
+            "— roads, water, and power affect more people day-to-day than schools or "
+            "other public buildings — not a Vellore-specific study. Consult official "
+            "SDRF/NDRF documentation and a local infrastructure assessment for real "
+            "figures."
         ),
     }
 
@@ -123,7 +141,14 @@ def _ndvi_projection(drop_at_100pct_severity: float, severity_pct: float, days_b
 
 
 def _fauna_projection(z_drop_at_100pct_severity: float, severity_pct: float):
-    windows = fetch_monthly_occurrence_counts()
+    """Returns None if GBIF is unreachable — wildlife-observation data is the noisiest,
+    least essential signal feeding these disaster scenarios (fire/flood are still fully
+    meaningful from NO2/NDVI/rainfall alone), so a GBIF outage shouldn't fail the whole
+    simulation the way a missing NO2/NDVI baseline would."""
+    try:
+        windows = fetch_monthly_occurrence_counts()
+    except RuntimeError:
+        return None
     counts = [w["count"] for w in windows]
     current = counts[-1]
     baseline_counts = counts[:-1]
@@ -134,12 +159,22 @@ def _fauna_projection(z_drop_at_100pct_severity: float, severity_pct: float):
     return current, z_before, z_after
 
 
-def simulate_flood_event(severity_pct: float, rainfall_days_back: int = 180, recent_window_days: int = 7) -> dict:
+def simulate_flood_event(
+    severity_pct: float,
+    rainfall_days_back: int = 180,
+    recent_window_days: int = 7,
+    population: float | None = None,
+) -> dict:
     """What if the recent rainfall (7-day total) were `severity_pct`% higher than it
     already is relative to its own baseline? Projects effects on waterborne disease,
-    vegetation, and wildlife activity, plus a reconstruction-fund estimate."""
+    vegetation, and wildlife activity, plus a reconstruction-fund estimate.
+
+    `population` is an optional tentative headcount for the affected area, supplied by the
+    caller instead of the generic EST_POPULATION_IN_BUFFER placeholder."""
     if severity_pct < 0:
         raise ValueError("severity_pct must be non-negative")
+    if population is not None and population <= 0:
+        raise ValueError("population must be positive")
 
     rainfall = fetch_rainfall_daily_series(days_back=rainfall_days_back)
     rolling_sum = rainfall.rolling(recent_window_days).sum().dropna()
@@ -153,9 +188,7 @@ def simulate_flood_event(severity_pct: float, rainfall_days_back: int = 180, rec
     ndvi_current, ndvi_projected, z_ndvi_before, z_ndvi_after = _ndvi_projection(
         FLOOD_NDVI_DROP_AT_100PCT_SEVERITY, severity_pct
     )
-    fauna_current, z_fauna_before, z_fauna_after = _fauna_projection(
-        FLOOD_FAUNA_Z_DROP_AT_100PCT_SEVERITY, severity_pct
-    )
+    fauna_result = _fauna_projection(FLOOD_FAUNA_Z_DROP_AT_100PCT_SEVERITY, severity_pct)
 
     graph = build_health_risk_graph()
     outcomes = []
@@ -167,37 +200,53 @@ def simulate_flood_event(severity_pct: float, rainfall_days_back: int = 180, rec
         outcomes.append(
             {"outcome": outcome, "risk_before": classify_anomaly(z_ndvi_before, invert=True), "risk_after": classify_anomaly(z_ndvi_after, invert=True)}
         )
-    for _, outcome, _ in graph.out_edges("wildlife_activity", data=True):
-        outcomes.append(
-            {"outcome": outcome, "risk_before": classify_anomaly(z_fauna_before, invert=True), "risk_after": classify_anomaly(z_fauna_after, invert=True)}
+    metrics = {
+        "rainfall_mm": {"current": rain_current, "projected": rain_projected},
+        "ndvi": {"current": ndvi_current, "projected": ndvi_projected},
+    }
+    assumption = (
+        "Vegetation-damage and wildlife-disruption coefficients are stated "
+        "illustrative assumptions layered on real rainfall/NDVI/GBIF baselines, not "
+        "calibrated for Vellore."
+    )
+    if fauna_result is not None:
+        fauna_current, z_fauna_before, z_fauna_after = fauna_result
+        metrics["fauna_observations"] = {"current": fauna_current}
+        for _, outcome, _ in graph.out_edges("wildlife_activity", data=True):
+            outcomes.append(
+                {"outcome": outcome, "risk_before": classify_anomaly(z_fauna_before, invert=True), "risk_after": classify_anomaly(z_fauna_after, invert=True)}
+            )
+    else:
+        assumption += (
+            " Wildlife-observation data was unavailable for this run, so the "
+            "fauna outcome is omitted rather than shown with stale numbers."
         )
 
     return {
         "city": settings.pilot_city,
         "scenario": "flood_event",
         "severity_pct": severity_pct,
-        "metrics": {
-            "rainfall_mm": {"current": rain_current, "projected": rain_projected},
-            "ndvi": {"current": ndvi_current, "projected": ndvi_projected},
-            "fauna_observations": {"current": fauna_current},
-        },
+        "metrics": metrics,
         "outcomes": outcomes,
-        "reconstruction_estimate": estimate_reconstruction_fund(severity_pct),
-        "assumption": (
-            "Vegetation-damage and wildlife-disruption coefficients are stated "
-            "illustrative assumptions layered on real rainfall/NDVI/GBIF baselines — not "
-            "calibrated for Vellore. See CLAUDE.md."
-        ),
+        "reconstruction_estimate": estimate_reconstruction_fund(severity_pct, population),
+        "assumption": assumption,
     }
 
 
-def simulate_fire_event(severity_pct: float, no2_days_back: int = 180) -> dict:
+def simulate_fire_event(
+    severity_pct: float, no2_days_back: int = 180, population: float | None = None
+) -> dict:
     """What if a fire of `severity_pct` intensity occurred? Projects effects on air
     quality (smoke proxy), vegetation, and wildlife activity, plus a reconstruction-fund
     estimate. Unlike flood, there's no live "current fire" indicator to compare against —
-    severity is a pure hypothetical input, not derived from a real anomaly."""
+    severity is a pure hypothetical input, not derived from a real anomaly.
+
+    `population` is an optional tentative headcount for the affected area, supplied by the
+    caller instead of the generic EST_POPULATION_IN_BUFFER placeholder."""
     if severity_pct < 0:
         raise ValueError("severity_pct must be non-negative")
+    if population is not None and population <= 0:
+        raise ValueError("population must be positive")
 
     no2_series = fetch_no2_daily_series(days_back=no2_days_back)
     no2_baseline_mean = float(no2_series.mean())
@@ -210,9 +259,7 @@ def simulate_fire_event(severity_pct: float, no2_days_back: int = 180) -> dict:
     ndvi_current, ndvi_projected, z_ndvi_before, z_ndvi_after = _ndvi_projection(
         FIRE_NDVI_DROP_AT_100PCT_SEVERITY, severity_pct
     )
-    fauna_current, z_fauna_before, z_fauna_after = _fauna_projection(
-        FIRE_FAUNA_Z_DROP_AT_100PCT_SEVERITY, severity_pct
-    )
+    fauna_result = _fauna_projection(FIRE_FAUNA_Z_DROP_AT_100PCT_SEVERITY, severity_pct)
 
     graph = build_health_risk_graph()
     outcomes = []
@@ -224,40 +271,54 @@ def simulate_fire_event(severity_pct: float, no2_days_back: int = 180) -> dict:
         outcomes.append(
             {"outcome": outcome, "risk_before": classify_anomaly(z_ndvi_before, invert=True), "risk_after": classify_anomaly(z_ndvi_after, invert=True)}
         )
-    for _, outcome, _ in graph.out_edges("wildlife_activity", data=True):
-        outcomes.append(
-            {"outcome": outcome, "risk_before": classify_anomaly(z_fauna_before, invert=True), "risk_after": classify_anomaly(z_fauna_after, invert=True)}
+    metrics = {
+        "no2_smoke_proxy": {"current": no2_current, "projected": no2_projected},
+        "ndvi": {"current": ndvi_current, "projected": ndvi_projected},
+    }
+    assumption = (
+        "No live 'current fire' indicator exists, so severity is a pure hypothetical "
+        "input. The air-quality effect is illustrated via the NO2 proxy as a rough "
+        "smoke stand-in, not a literal smoke measurement; vegetation-damage and "
+        "wildlife-disruption coefficients are stated illustrative assumptions, not "
+        "calibrated for Vellore."
+    )
+    if fauna_result is not None:
+        fauna_current, z_fauna_before, z_fauna_after = fauna_result
+        metrics["fauna_observations"] = {"current": fauna_current}
+        for _, outcome, _ in graph.out_edges("wildlife_activity", data=True):
+            outcomes.append(
+                {"outcome": outcome, "risk_before": classify_anomaly(z_fauna_before, invert=True), "risk_after": classify_anomaly(z_fauna_after, invert=True)}
+            )
+    else:
+        assumption += (
+            " Wildlife-observation data was unavailable for this run, so the "
+            "fauna outcome is omitted rather than shown with stale numbers."
         )
 
     return {
         "city": settings.pilot_city,
         "scenario": "fire_event",
         "severity_pct": severity_pct,
-        "metrics": {
-            "no2_smoke_proxy": {"current": no2_current, "projected": no2_projected},
-            "ndvi": {"current": ndvi_current, "projected": ndvi_projected},
-            "fauna_observations": {"current": fauna_current},
-        },
+        "metrics": metrics,
         "outcomes": outcomes,
-        "reconstruction_estimate": estimate_reconstruction_fund(severity_pct),
-        "assumption": (
-            "No live 'current fire' indicator exists, so severity is a pure hypothetical "
-            "input. The air-quality effect is illustrated via the NO2 proxy as a rough "
-            "smoke stand-in (not a literal smoke measurement); vegetation-damage and "
-            "wildlife-disruption coefficients are stated illustrative assumptions — not "
-            "calibrated for Vellore. See CLAUDE.md."
-        ),
+        "reconstruction_estimate": estimate_reconstruction_fund(severity_pct, population),
+        "assumption": assumption,
     }
 
 
-def simulate_earthquake_event(severity_pct: float) -> dict:
+def simulate_earthquake_event(severity_pct: float, population: float | None = None) -> dict:
     """What if an earthquake of `severity_pct` intensity occurred? Earthquakes aren't
     weather/vegetation-driven, so there's no defensible link to this app's environmental
     indicators (NO2/NDVI/rainfall/fauna) — this simulation deliberately skips those
     outcomes rather than force a fake causal story, and only produces the
-    reconstruction-fund estimate."""
+    reconstruction-fund estimate.
+
+    `population` is an optional tentative headcount for the affected area, supplied by the
+    caller instead of the generic EST_POPULATION_IN_BUFFER placeholder."""
     if severity_pct < 0:
         raise ValueError("severity_pct must be non-negative")
+    if population is not None and population <= 0:
+        raise ValueError("population must be positive")
 
     return {
         "city": settings.pilot_city,
@@ -265,23 +326,23 @@ def simulate_earthquake_event(severity_pct: float) -> dict:
         "severity_pct": severity_pct,
         "metrics": {},
         "outcomes": [],
-        "reconstruction_estimate": estimate_reconstruction_fund(severity_pct),
+        "reconstruction_estimate": estimate_reconstruction_fund(severity_pct, population),
         "assumption": (
             "Earthquakes have no defensible causal link to this project's environmental "
             "indicators (NO2/NDVI/rainfall/fauna), so no risk outcomes are shown — only "
-            "the reconstruction-fund estimate, which itself is illustrative (see its own "
-            "assumption field). This project has not verified Vellore's actual seismic "
-            "hazard zone classification (BIS IS 1893) this session; treat this purely as "
-            "a what-if cost exercise, not a real seismic-risk assessment."
+            "the reconstruction-fund estimate below, which is itself illustrative. "
+            "Vellore's actual seismic hazard zone classification (BIS IS 1893) hasn't "
+            "been factored in here; treat this purely as a what-if cost exercise, not a "
+            "real seismic-risk assessment."
         ),
     }
 
 
-def simulate_disaster(disaster_type: str, severity_pct: float) -> dict:
+def simulate_disaster(disaster_type: str, severity_pct: float, population: float | None = None) -> dict:
     if disaster_type not in DISASTER_TYPES:
         raise ValueError(f"disaster_type must be one of {DISASTER_TYPES}")
     if disaster_type == "flood":
-        return simulate_flood_event(severity_pct)
+        return simulate_flood_event(severity_pct, population=population)
     if disaster_type == "fire":
-        return simulate_fire_event(severity_pct)
-    return simulate_earthquake_event(severity_pct)
+        return simulate_fire_event(severity_pct, population=population)
+    return simulate_earthquake_event(severity_pct, population=population)
