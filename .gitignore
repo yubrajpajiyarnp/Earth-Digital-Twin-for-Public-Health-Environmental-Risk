@@ -3,6 +3,7 @@ backend/__pycache__/
 backend/**/__pycache__/
 backend/.env
 backend/data/app.db
+backend/data/models/
 frontend/node_modules/
 frontend/dist/
 .logs/

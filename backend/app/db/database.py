@@ -3,7 +3,7 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.db.models import Base
+from app.db.tables import Base
 
 DB_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "app.db"
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)

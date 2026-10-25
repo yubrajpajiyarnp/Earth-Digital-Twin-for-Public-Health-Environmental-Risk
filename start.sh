@@ -1,6 +1,7 @@
 #!/bin/bash
-# Starts both the backend (FastAPI) and frontend (Vite/React) for the Earth Digital Twin
-# project, waits until each responds, then prints the dashboard link.
+# Starts every piece of the Nepal Disaster Digital Twin at once: the backend (FastAPI),
+# the frontend (Vite/React), and the local Ollama LLM server used for narrative text.
+# Waits until each responds, then prints the dashboard link.
 
 set -uo pipefail
 
@@ -10,6 +11,14 @@ FRONTEND_DIR="$PROJECT_ROOT/frontend"
 LOG_DIR="$PROJECT_ROOT/.logs"
 BACKEND_PORT=8000
 FRONTEND_PORT=5173
+
+# Ollama's base URL can be overridden in backend/.env (OLLAMA_BASE_URL=...); fall back to
+# the same default as app/core/config.py.
+OLLAMA_BASE_URL="http://localhost:11434"
+if [ -f "$BACKEND_DIR/.env" ]; then
+  env_value="$(grep -m1 '^OLLAMA_BASE_URL=' "$BACKEND_DIR/.env" | cut -d= -f2- | tr -d '"'"'"'')"
+  [ -n "$env_value" ] && OLLAMA_BASE_URL="$env_value"
+fi
 
 mkdir -p "$LOG_DIR"
 
@@ -25,12 +34,24 @@ if [ ! -d "$FRONTEND_DIR/node_modules" ]; then
   exit 1
 fi
 
-echo "Starting Earth Digital Twin..."
+echo "Starting Nepal Disaster Digital Twin..."
 
 # Free up the ports from any previous run before starting fresh.
 lsof -ti:$BACKEND_PORT 2>/dev/null | xargs kill -9 2>/dev/null
 lsof -ti:$FRONTEND_PORT 2>/dev/null | xargs kill -9 2>/dev/null
 sleep 1
+
+OLLAMA_STARTED=0
+if curl -s -o /dev/null --max-time 1 "$OLLAMA_BASE_URL/api/tags"; then
+  : # already running (e.g. as a system service) — leave it alone
+elif command -v ollama >/dev/null 2>&1; then
+  ollama serve > "$LOG_DIR/ollama.log" 2>&1 &
+  OLLAMA_PID=$!
+  disown
+  OLLAMA_STARTED=1
+else
+  echo "Note: 'ollama' not found — AI narrative text will fall back to templates."
+fi
 
 (cd "$BACKEND_DIR" && .venv/bin/uvicorn app.main:app --reload --port "$BACKEND_PORT") \
   > "$LOG_DIR/backend.log" 2>&1 &
@@ -58,14 +79,22 @@ wait_for() {
   return 1
 }
 
+if [ "$OLLAMA_STARTED" -eq 1 ]; then
+  wait_for "$OLLAMA_BASE_URL/api/tags" ollama || echo "  (narrative text will fall back to templates)"
+fi
 wait_for "http://127.0.0.1:$BACKEND_PORT/api/health" backend
 wait_for "http://localhost:$FRONTEND_PORT/" frontend
 
 echo ""
 echo "Backend:   http://127.0.0.1:$BACKEND_PORT   (API docs: http://127.0.0.1:$BACKEND_PORT/docs)"
 echo "Frontend:  http://localhost:$FRONTEND_PORT"
+echo "Ollama:    $OLLAMA_BASE_URL"
 echo ""
 echo "Open the dashboard here: http://localhost:$FRONTEND_PORT"
 echo ""
-echo "Logs: $LOG_DIR/backend.log, $LOG_DIR/frontend.log"
-echo "To stop: lsof -ti:$BACKEND_PORT | xargs kill; lsof -ti:$FRONTEND_PORT | xargs kill"
+echo "Logs: $LOG_DIR/backend.log, $LOG_DIR/frontend.log, $LOG_DIR/ollama.log"
+stop_cmd="lsof -ti:$BACKEND_PORT,$FRONTEND_PORT | xargs kill"
+if [ "$OLLAMA_STARTED" -eq 1 ]; then
+  stop_cmd="$stop_cmd; kill $OLLAMA_PID"
+fi
+echo "To stop: $stop_cmd"

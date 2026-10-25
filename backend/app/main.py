@@ -3,11 +3,15 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import router
 from app.db.database import init_db
-from app.services.knowledge_graph.graph import seed_graph_if_empty
+from app.models.risk.knowledge_graph import seed_graph_if_empty
+from app.models.simulation.disaster_ml import start_background_training
 
-app = FastAPI(title="Earth Digital Twin API")
+app = FastAPI(title="Nepal Hydro-Geological Disaster Digital Twin API")
 init_db()
 seed_graph_if_empty()
+# Loads the persisted model, or (re)trains it in a background thread if missing or stale —
+# the API starts serving immediately either way.
+start_background_training()
 
 app.add_middleware(
     CORSMiddleware,
